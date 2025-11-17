@@ -1484,7 +1484,7 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageDu (std::string plmId, uint16_t nrC
           ueImsiComplete, macPduUe, macPduInitialUe, macQpsk, mac16Qam, mac64Qam, macRetx,
           macVolume, macPrb, macMac04, macMac59, macMac1014, macMac1519, macMac2024, macMac2529,
           macSinrBin1, macSinrBin2, macSinrBin3, macSinrBin4, macSinrBin5, macSinrBin6, macSinrBin7,
-          rlcBufferOccup, drbThrDlUeid);
+          rlcBufferOccup, drbThrDlUeid, m_cellId);
 
       uePmStringDu.insert (std::make_pair (
           imsi, std::to_string (macPduUe) + "," + std::to_string (macPduInitialUe) + "," +
