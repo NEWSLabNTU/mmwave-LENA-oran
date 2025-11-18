@@ -1018,7 +1018,10 @@ LteEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
       if (!indicationMessageHelper->IsOffline ())
         {
           // DRB.RelActNbr.5QI.UEID not modeled in the simulator
-          indicationMessageHelper->AddCuCpUePmItem (ueImsiComplete, numDrb, 0);
+          // Phase 1: Pass Cell ID for handover tracking (L3 RRC measurements and throughput not available in LTE CU-CP)
+          indicationMessageHelper->AddCuCpUePmItem (ueImsiComplete, numDrb, 0,
+                                                    nullptr, nullptr,  // L3 RRC measurements not available in LTE
+                                                    m_cellId);  // Throughput defaults to 0.0
         }
 
       uePmString.insert (std::make_pair (imsi, std::to_string (numDrb) + "," + std::to_string (0)));

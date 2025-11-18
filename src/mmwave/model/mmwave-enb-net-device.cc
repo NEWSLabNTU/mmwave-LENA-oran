@@ -1231,8 +1231,14 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
 
       if (!indicationMessageHelper->IsOffline ())
         {
+          // Phase 1 & 2: Extract throughput for handover tracking
+          double drbThrDlUeid = m_drbThrDlUeid.find (imsi) != m_drbThrDlUeid.end ()
+                                  ? m_drbThrDlUeid.at (imsi)
+                                  : 0.0;
+
           indicationMessageHelper->AddCuCpUePmItem (ueImsiComplete, numDrb, 0,
-                                                    l3RrcMeasurementServing, l3RrcMeasurementNeigh);
+                                                    l3RrcMeasurementServing, l3RrcMeasurementNeigh,
+                                                    m_cellId, drbThrDlUeid);
         }
     }
 
