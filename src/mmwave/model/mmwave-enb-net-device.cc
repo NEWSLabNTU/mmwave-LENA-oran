@@ -1134,6 +1134,14 @@ MmWaveEnbNetDevice::BuildRicIndicationMessageCuCp (std::string plmId)
         {
           ueVal->AddItem<long> ("DRB.EstabSucc.5QI.UEID", numDrb);
           ueVal->AddItem<long> ("DRB.RelActNbr.5QI.UEID", 0); // not modeled in the simulator
+
+          // Phase 1 & 2: Add Cell ID and throughput for handover tracking
+          ueVal->AddItem<long> ("L3.ServingCell.CellId", m_cellId);
+
+          double drbThrDlUeid = m_drbThrDlUeid.find (imsi) != m_drbThrDlUeid.end ()
+                                  ? m_drbThrDlUeid.at (imsi)
+                                  : 0;
+          ueVal->AddItem<double> ("DRB.UEThpDl", drbThrDlUeid);
         }
 
       // IMP: create L3 RRC reports
@@ -2039,6 +2047,14 @@ MmWaveEnbNetDevice::BuildGUICuCp (std::string plmId)
         {
           ueVal->AddItem<long> ("DRB.EstabSucc.5QI.UEID", numDrb);
           ueVal->AddItem<long> ("DRB.RelActNbr.5QI.UEID", 0); // not modeled in the simulator
+
+          // Phase 1 & 2: Add Cell ID and throughput for handover tracking
+          ueVal->AddItem<long> ("L3.ServingCell.CellId", m_cellId);
+
+          double drbThrDlUeid = m_drbThrDlUeid.find (imsi) != m_drbThrDlUeid.end ()
+                                  ? m_drbThrDlUeid.at (imsi)
+                                  : 0;
+          ueVal->AddItem<double> ("DRB.UEThpDl", drbThrDlUeid);
         }
 
       // IMP: create L3 RRC reports
