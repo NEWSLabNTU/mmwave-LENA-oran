@@ -871,7 +871,7 @@ LteEnbNetDevice::BuildRicIndicationMessageCuUp (std::string plmId)
       if (!indicationMessageHelper->IsOffline ())
         {
           indicationMessageHelper->AddCuUpUePmItem (ueImsiComplete, txBytes, txDlPackets,
-                                                    pdcpThroughput, pdcpLatency);
+                                                    pdcpThroughput, pdcpLatency, m_cellId);
         }
 
       uePmString.insert (std::make_pair (
