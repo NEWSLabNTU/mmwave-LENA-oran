@@ -2196,10 +2196,12 @@ MmWaveHelper::InstallSingleEnbDevice(Ptr<Node> n)
                     NS_LOG_WARN ("Propagation model does not have a Frequency attribute");
             }
     }*/
+    NS_LOG_INFO ("[E2 DEBUG InstallSingleEnbDevice] cellId=" << cellId << ", m_e2mode_nr=" << m_e2mode_nr << ", m_e2mode_lte=" << m_e2mode_lte);
         if(m_e2mode_nr) {
+    NS_LOG_INFO ("[E2 DEBUG] E2ModeNr is TRUE - initializing E2 for mmWave cell " << cellId);
     const uint16_t local_port = m_e2localPort + (uint16_t) cellId;
     const std::string gnb_id{std::to_string (cellId)};
-    
+
     std::string plmnId = "111";
 
     NS_LOG_INFO ("cell_id " << gnb_id);
@@ -2213,6 +2215,8 @@ MmWaveHelper::InstallSingleEnbDevice(Ptr<Node> n)
     device->SetAttribute("E2PdcpCalculator", PointerValue(m_e2PdcpStats));
     device->SetAttribute("E2RlcCalculator", PointerValue(m_e2RlcStats));
     device->SetAttribute("E2DuCalculator", PointerValue(m_phyStats));
+  } else {
+    NS_LOG_INFO ("[E2 DEBUG] E2ModeNr is FALSE - E2 NOT initialized for mmWave cell " << cellId);
   }
     device->Initialize();
     n->AddDevice(device);
