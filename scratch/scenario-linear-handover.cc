@@ -205,13 +205,15 @@ main (int argc, char *argv[])
   // E2 Termination IP address (FlexRIC RIC)
   Config::SetDefault ("ns3::MmWaveHelper::E2TermIp", StringValue (e2TermIp));
 
-  // CRITICAL: Enable E2 for NR (mmWave) mode
-  Config::SetDefault ("ns3::MmWaveHelper::E2ModeNr", BooleanValue (true));
+  // E2 Mode Configuration (use command-line variables)
+  Config::SetDefault ("ns3::MmWaveHelper::E2ModeLte", BooleanValue (e2lteEnabled));
+  Config::SetDefault ("ns3::MmWaveHelper::E2ModeNr", BooleanValue (e2nrEnabled));
 
-  // Enable E2 reports
-  Config::SetDefault ("ns3::MmWaveEnbNetDevice::EnableDuReport", BooleanValue (true));
-  Config::SetDefault ("ns3::MmWaveEnbNetDevice::EnableCuUpReport", BooleanValue (false));
-  Config::SetDefault ("ns3::MmWaveEnbNetDevice::EnableCuCpReport", BooleanValue (false));
+  // Enable E2 reports (use command-line variables)
+  Config::SetDefault ("ns3::MmWaveEnbNetDevice::EnableDuReport", BooleanValue (e2du));
+  Config::SetDefault ("ns3::MmWaveEnbNetDevice::EnableCuUpReport", BooleanValue (e2cuUp));
+  Config::SetDefault ("ns3::MmWaveEnbNetDevice::EnableCuCpReport", BooleanValue (e2cuCp));
+  Config::SetDefault ("ns3::MmWaveEnbNetDevice::ReducedPmValues", BooleanValue (reducedPmValues));
 
   // Enable/disable E2 file logging
   Config::SetDefault ("ns3::MmWaveEnbNetDevice::EnableE2FileLogging", BooleanValue (enableE2FileLogging));
@@ -222,10 +224,12 @@ main (int argc, char *argv[])
   NS_LOG_INFO ("  KPM Function ID: " << kpm_e2_func_id);
   NS_LOG_INFO ("  RC Function ID: " << rc_e2_func_id);
   NS_LOG_INFO ("  E2 Periodicity: " << indicationPeriodicity);
-  NS_LOG_INFO ("  E2ModeNr: ENABLED (set to true)");
-  NS_LOG_INFO ("  EnableDuReport: ENABLED (set to true)");
-  NS_LOG_INFO ("  EnableCuUpReport: DISABLED (set to false)");
-  NS_LOG_INFO ("  EnableCuCpReport: DISABLED (set to false)");
+  NS_LOG_INFO ("  E2ModeLte: " << (e2lteEnabled ? "ENABLED" : "DISABLED"));
+  NS_LOG_INFO ("  E2ModeNr: " << (e2nrEnabled ? "ENABLED" : "DISABLED"));
+  NS_LOG_INFO ("  EnableDuReport: " << (e2du ? "ENABLED" : "DISABLED"));
+  NS_LOG_INFO ("  EnableCuUpReport: " << (e2cuUp ? "ENABLED" : "DISABLED"));
+  NS_LOG_INFO ("  EnableCuCpReport: " << (e2cuCp ? "ENABLED" : "DISABLED"));
+  NS_LOG_INFO ("  ReducedPmValues: " << (reducedPmValues ? "ENABLED" : "DISABLED"));
   NS_LOG_INFO ("  EnableE2FileLogging: " << (enableE2FileLogging ? "ENABLED" : "DISABLED"));
 
   // Create helpers
