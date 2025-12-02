@@ -2219,6 +2219,8 @@ MmWaveHelper::InstallSingleEnbDevice(Ptr<Node> n)
     NS_LOG_INFO ("[E2 DEBUG] E2ModeNr is FALSE - E2 NOT initialized for mmWave cell " << cellId);
   }
     device->Initialize();
+
+    // E2Termination::Start() will be called automatically by device model's UpdateConfig() method
     n->AddDevice(device);
 
     for (auto it = ccMap.begin(); it != ccMap.end(); ++it)
@@ -2526,6 +2528,8 @@ MmWaveHelper::InstallSingleLteEnbDevice(Ptr<Node> n)
   }
 
   dev->Initialize ();
+
+  // E2Termination::Start() will be called automatically by device model's UpdateConfig() method
   n->AddDevice (dev);
 
     for (it = ccMap.begin(); it != ccMap.end(); ++it)
