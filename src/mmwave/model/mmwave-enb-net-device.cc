@@ -166,58 +166,118 @@ void
 MmWaveEnbNetDevice::CheckReportingFlag()
 {
   NS_LOG_FUNCTION(this);
+  // DEBUG: Entry point
+  NS_LOG_UNCOND("[DEBUG CheckReportingFlag] cell=" << m_cellId
+                << " stopSending=" << m_stopSendingMessages
+                << " hasValidSub=" << m_hasValidSubscription);
+
   if (!m_stopSendingMessages && m_hasValidSubscription)
   {
     const auto &sub_map = m_e2term->SubscriptionMapRef();
+    NS_LOG_UNCOND("[DEBUG CheckReportingFlag] cell=" << m_cellId << " sub_map.size=" << sub_map.size());
     if (!sub_map.empty())
     {
-      try 
+      // Check if this is Format 4 subscription (per-UE reporting)
+      // For Format 4, we always send reports without test condition filtering
+      // The xApp uses S-NSSAI test conditions for UE filtering, not threshold-based reporting
+      bool isFormat4 = false;
+      try
       {
-        const auto& expr = sub_map.at("Test Condition Expression");
-        const auto& value = sub_map.at("Test Condition Value");
-        
-        int index = std::any_cast<int>(expr);
-        int threshold = std::any_cast<int>(value);
-
-        // Get current PRB average
-        double currentPrbAvg = CalculatePrbAverage();
-        
-        // Only check conditions if we have enough points
-        if (currentPrbAvg >= 0)
+        auto it = sub_map.find("Action Definition Format");
+        if (it != sub_map.end())
         {
-          bool shouldReport = MATH_CALL_BACKS[index](currentPrbAvg, threshold);
-
-          NS_LOG_DEBUG("Current PRB Average: " << currentPrbAvg << 
-                       " Threshold: " << threshold << 
-                       " Should Report: " << m_is_reported);
-          // If we haven't started reporting yet, check if we should start
-          if (!m_isReportingEnabled)
-          {
-            if (shouldReport)
-            {
-              m_is_reported = true;
-              m_isReportingEnabled = true;
-              BuildAndSendReportMessage(m_lastSubscriptionParams);
-            }
-          }
-          else
-          {
-            // If reporting is already enabled, keep sending reports
-           // BuildAndSendReportMessage(m_lastSubscriptionParams);
-           m_is_reported = true;
-           m_isReportingEnabled = true;
-
-          }
+          int action_def = std::any_cast<int>(it->second);
+          isFormat4 = (action_def == E2SM_KPM_ActionDefinition__actionDefinition_formats_PR_actionDefinition_Format4);
+          NS_LOG_UNCOND("[DEBUG CheckReportingFlag] cell=" << m_cellId << " action_def=" << action_def << " isFormat4=" << isFormat4);
         }
       }
       catch (const std::exception& e)
       {
-        NS_LOG_ERROR("Error checking PRB usage: " << e.what());
+        NS_LOG_UNCOND("[DEBUG CheckReportingFlag] cell=" << m_cellId << " action_def cast failed: " << e.what());
       }
+
+      if (isFormat4)
+      {
+        // For Format 4: Always send reports (per-UE reporting, no threshold checking)
+        NS_LOG_UNCOND("[DEBUG CheckReportingFlag] cell=" << m_cellId << " -> SENDING REPORT (Format 4 - always report)");
+        BuildAndSendReportMessage(m_lastSubscriptionParams);
+        m_is_reported = true;
+        m_isReportingEnabled = true;
+      }
+      else
+      {
+        // Original threshold-based reporting logic for other formats
+        try
+        {
+          const auto& expr = sub_map.at("Test Condition Expression");
+          const auto& value = sub_map.at("Test Condition Value");
+
+          int index = std::any_cast<int>(expr);
+          int threshold = std::any_cast<int>(value);
+
+          // Get current PRB average
+          double currentPrbAvg = CalculatePrbAverage();
+          NS_LOG_UNCOND("[DEBUG CheckReportingFlag] cell=" << m_cellId
+                        << " prbAvg=" << currentPrbAvg
+                        << " threshold=" << threshold
+                        << " index=" << index);
+
+          // Only check conditions if we have enough points
+          if (currentPrbAvg >= 0)
+          {
+            bool shouldReport = MATH_CALL_BACKS[index](currentPrbAvg, threshold);
+
+            NS_LOG_UNCOND("[DEBUG CheckReportingFlag] cell=" << m_cellId
+                          << " shouldReport=" << shouldReport
+                          << " isReportingEnabled=" << m_isReportingEnabled);
+            if (!m_isReportingEnabled)
+            {
+              if (shouldReport)
+              {
+                NS_LOG_UNCOND("[DEBUG CheckReportingFlag] cell=" << m_cellId << " -> SENDING REPORT");
+                m_is_reported = true;
+                m_isReportingEnabled = true;
+                BuildAndSendReportMessage(m_lastSubscriptionParams);
+              }
+              else
+              {
+                NS_LOG_UNCOND("[DEBUG CheckReportingFlag] cell=" << m_cellId << " -> NOT reporting (condition not met)");
+              }
+            }
+            else
+            {
+              NS_LOG_UNCOND("[DEBUG CheckReportingFlag] cell=" << m_cellId << " -> SENDING REPORT (already enabled)");
+              BuildAndSendReportMessage(m_lastSubscriptionParams);
+              m_is_reported = true;
+              m_isReportingEnabled = true;
+            }
+          }
+          else
+          {
+            NS_LOG_UNCOND("[DEBUG CheckReportingFlag] cell=" << m_cellId << " -> prbAvg < 0, skipping");
+          }
+        }
+        catch (const std::exception& e)
+        {
+          // If test conditions can't be parsed, fall back to always-report mode
+          NS_LOG_UNCOND("[DEBUG CheckReportingFlag] cell=" << m_cellId << " -> SENDING REPORT (fallback, exception: " << e.what() << ")");
+          BuildAndSendReportMessage(m_lastSubscriptionParams);
+          m_is_reported = true;
+          m_isReportingEnabled = true;
+        }
+      }
+    }
+    else
+    {
+      NS_LOG_UNCOND("[DEBUG CheckReportingFlag] cell=" << m_cellId << " -> sub_map is EMPTY");
     }
     // Schedule next check
     Simulator::ScheduleWithContext(1, m_checkPeriod,
         &MmWaveEnbNetDevice::CheckReportingFlag, this);
+  }
+  else
+  {
+    NS_LOG_UNCOND("[DEBUG CheckReportingFlag] cell=" << m_cellId << " -> NOT scheduling (stopSending or no valid sub)");
   }
 }
 
@@ -226,20 +286,30 @@ void
 MmWaveEnbNetDevice::KpmSubscriptionCallback(E2AP_PDU_t *sub_req_pdu)
 {
   NS_LOG_DEBUG("\nReceived RIC Subscription Request, cellId= " << m_cellId << "\n");
+  NS_LOG_UNCOND("[DEBUG KpmSubscriptionCallback] cell=" << m_cellId << " ENTRY - received subscription request");
 
   // Store subscription parameters
   m_lastSubscriptionParams = m_e2term->ProcessRicSubscriptionRequest(sub_req_pdu);
   m_hasValidSubscription = true;
 
-  NS_LOG_DEBUG("requestorId " << +m_lastSubscriptionParams.requestorId << 
+  NS_LOG_UNCOND("[DEBUG KpmSubscriptionCallback] cell=" << m_cellId
+                << " requestorId=" << +m_lastSubscriptionParams.requestorId
+                << " instanceId=" << +m_lastSubscriptionParams.instanceId
+                << " ranFuncionId=" << +m_lastSubscriptionParams.ranFuncionId
+                << " actionId=" << +m_lastSubscriptionParams.actionId
+                << " hasValidSubscription=" << m_hasValidSubscription);
+
+  NS_LOG_DEBUG("requestorId " << +m_lastSubscriptionParams.requestorId <<
                ", instanceId " << +m_lastSubscriptionParams.instanceId <<
                ", ranFuncionId " << +m_lastSubscriptionParams.ranFuncionId <<
                ", actionId " << +m_lastSubscriptionParams.actionId);
 
   const auto &sub_map = m_e2term->SubscriptionMapRef();
+  NS_LOG_UNCOND("[DEBUG KpmSubscriptionCallback] cell=" << m_cellId << " sub_map.size=" << sub_map.size());
+
   if (!sub_map.empty())
   {
-    try 
+    try
     {
       // Check if keys exist
       if (sub_map.find("Test Condition Expression") == sub_map.end() ||
@@ -247,6 +317,7 @@ MmWaveEnbNetDevice::KpmSubscriptionCallback(E2AP_PDU_t *sub_req_pdu)
           sub_map.find("Test Condition Value") == sub_map.end())
       {
         NS_LOG_ERROR("Required keys not found in sub_map");
+        NS_LOG_UNCOND("[DEBUG KpmSubscriptionCallback] cell=" << m_cellId << " ERROR: Required keys not found in sub_map");
         return;
       }
 
@@ -256,9 +327,15 @@ MmWaveEnbNetDevice::KpmSubscriptionCallback(E2AP_PDU_t *sub_req_pdu)
       int index = std::any_cast<int>(expr);
       int action_def = std::any_cast<int>(action);
 
+      NS_LOG_UNCOND("[DEBUG KpmSubscriptionCallback] cell=" << m_cellId
+                    << " action_def=" << action_def
+                    << " expected_Format4=" << E2SM_KPM_ActionDefinition__actionDefinition_formats_PR_actionDefinition_Format4
+                    << " index=" << index);
+
       if (index < 0 || index >= static_cast<int>(MATH_CALL_BACKS.size()))
       {
         NS_LOG_ERROR("Invalid index: " << index);
+        NS_LOG_UNCOND("[DEBUG KpmSubscriptionCallback] cell=" << m_cellId << " ERROR: Invalid index " << index);
         return;
       }
 
@@ -266,30 +343,43 @@ MmWaveEnbNetDevice::KpmSubscriptionCallback(E2AP_PDU_t *sub_req_pdu)
       {
         case E2SM_KPM_ActionDefinition__actionDefinition_formats_PR_actionDefinition_Format4:
           {
+            NS_LOG_UNCOND("[DEBUG KpmSubscriptionCallback] cell=" << m_cellId << " -> Action Format 4, scheduling CheckReportingFlag");
             // Clear PRB history at subscription start
             m_prbHistory.clear();
-            
+
             // Start periodic PRB checking
             if (!m_stopSendingMessages)
             {
               Simulator::ScheduleWithContext(1, m_checkPeriod,
                   &MmWaveEnbNetDevice::CheckReportingFlag, this);
-              
-              NS_LOG_DEBUG("Started PRB monitoring with period " << 
+
+              NS_LOG_UNCOND("[DEBUG KpmSubscriptionCallback] cell=" << m_cellId
+                            << " -> Scheduled CheckReportingFlag with period " << m_checkPeriod.GetMilliSeconds() << "ms");
+              NS_LOG_DEBUG("Started PRB monitoring with period " <<
                           m_checkPeriod.GetMilliSeconds() << "ms");
+            }
+            else
+            {
+              NS_LOG_UNCOND("[DEBUG KpmSubscriptionCallback] cell=" << m_cellId << " -> NOT scheduling (stopSendingMessages=true)");
             }
           }
           break;
 
         default:
           NS_LOG_ERROR("Action Definition NOT supported");
+          NS_LOG_UNCOND("[DEBUG KpmSubscriptionCallback] cell=" << m_cellId << " ERROR: Action Definition " << action_def << " NOT supported");
           break;
       }
     }
     catch (const std::exception& e)
     {
       NS_LOG_ERROR("Error in KpmSubscriptionCallback: " << e.what());
+      NS_LOG_UNCOND("[DEBUG KpmSubscriptionCallback] cell=" << m_cellId << " EXCEPTION: " << e.what());
     }
+  }
+  else
+  {
+    NS_LOG_UNCOND("[DEBUG KpmSubscriptionCallback] cell=" << m_cellId << " WARNING: sub_map is EMPTY");
   }
 }
 
@@ -1666,8 +1756,10 @@ MmWaveEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReq
       Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
       Ptr<KpmIndicationMessage> cuUpMsg = BuildRicIndicationMessageCuUp (plmId);
 
-      // Send CU-UP only if offline logging is disabled
-      if (header != nullptr && cuUpMsg != nullptr)
+      // Send CU-UP only if offline logging is disabled and encoding succeeded
+      if (header != nullptr && cuUpMsg != nullptr &&
+          header->m_buffer != nullptr && cuUpMsg->m_buffer != nullptr &&
+          header->m_size > 0 && cuUpMsg->m_size > 0)
         {
           NS_LOG_DEBUG ("Send NR CU-UP");
           E2AP_PDU *pdu_cuup_ue = new E2AP_PDU;
@@ -1682,6 +1774,10 @@ MmWaveEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReq
           m_e2term->SendE2Message (pdu_cuup_ue);
           delete pdu_cuup_ue;
         }
+      else if (header != nullptr && cuUpMsg != nullptr)
+        {
+          NS_LOG_DEBUG ("Skipping NR CU-UP send: encoding failed (m_buffer is nullptr)");
+        }
     }
 
   if (m_sendCuCp)
@@ -1690,10 +1786,11 @@ MmWaveEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReq
       Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
       Ptr<KpmIndicationMessage> cuCpMsg = BuildRicIndicationMessageCuCp (plmId);
 
-      // Send CU-CP only if offline logging is disabled
-      if (header != nullptr && cuCpMsg != nullptr)
+      // Send CU-CP only if offline logging is disabled and encoding succeeded
+      if (header != nullptr && cuCpMsg != nullptr &&
+          header->m_buffer != nullptr && cuCpMsg->m_buffer != nullptr &&
+          header->m_size > 0 && cuCpMsg->m_size > 0)
         {
-
           NS_LOG_DEBUG ("Send NR CU-CP");
           E2AP_PDU *pdu_cucp_ue = new E2AP_PDU;
           encoding::generate_e2apv1_indication_request_parameterized (
@@ -1707,6 +1804,10 @@ MmWaveEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReq
           m_e2term->SendE2Message (pdu_cucp_ue);
           delete pdu_cucp_ue;
         }
+      else if (header != nullptr && cuCpMsg != nullptr)
+        {
+          NS_LOG_DEBUG ("Skipping NR CU-CP send: encoding failed (m_buffer is nullptr)");
+        }
     }
 
   if (m_sendDu)
@@ -1715,10 +1816,11 @@ MmWaveEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReq
       Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
       Ptr<KpmIndicationMessage> duMsg = BuildRicIndicationMessageDu (plmId, m_cellId);
 
-      // Send DU only if offline logging is disabled
-      if (header != nullptr && duMsg != nullptr)
+      // Send DU only if offline logging is disabled and encoding succeeded
+      if (header != nullptr && duMsg != nullptr &&
+          header->m_buffer != nullptr && duMsg->m_buffer != nullptr &&
+          header->m_size > 0 && duMsg->m_size > 0)
         {
-
           NS_LOG_DEBUG ("Send NR DU");
           E2AP_PDU *pdu_du_ue = new E2AP_PDU;
           encoding::generate_e2apv1_indication_request_parameterized (
@@ -1731,6 +1833,10 @@ MmWaveEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReq
               duMsg->m_size); // size of the encoded message
           m_e2term->SendE2Message (pdu_du_ue);
           delete pdu_du_ue;
+        }
+      else if (header != nullptr && duMsg != nullptr)
+        {
+          NS_LOG_DEBUG ("Skipping NR DU send: encoding failed (m_buffer is nullptr)");
         }
     }
 

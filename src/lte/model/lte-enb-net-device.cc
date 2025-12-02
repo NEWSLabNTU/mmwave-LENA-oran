@@ -1120,8 +1120,10 @@ LteEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReques
       Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
       Ptr<KpmIndicationMessage> cuUpMsg = BuildRicIndicationMessageCuUp (plmId);
 
-      // Send CU-UP only if offline logging is disabled
-      if (!m_forceE2FileLogging && header != nullptr && cuUpMsg != nullptr)
+      // Send CU-UP only if offline logging is disabled and encoding succeeded
+      if (!m_forceE2FileLogging && header != nullptr && cuUpMsg != nullptr &&
+          header->m_buffer != nullptr && cuUpMsg->m_buffer != nullptr &&
+          header->m_size > 0 && cuUpMsg->m_size > 0)
         {
           NS_LOG_DEBUG ("Send LTE CU-UP");
           E2AP_PDU *pdu_cuup_ue = new E2AP_PDU;
@@ -1137,6 +1139,10 @@ LteEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReques
           m_e2term->SendE2Message (pdu_cuup_ue);
           delete pdu_cuup_ue;
         }
+      else if (!m_forceE2FileLogging && header != nullptr && cuUpMsg != nullptr)
+        {
+          NS_LOG_DEBUG ("Skipping LTE CU-UP send: encoding failed (m_buffer is nullptr)");
+        }
     }
 
   if (m_sendCuCp)
@@ -1145,10 +1151,11 @@ LteEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReques
       Ptr<KpmIndicationHeader> header = BuildRicIndicationHeader (plmId, gnbId, m_cellId);
       Ptr<KpmIndicationMessage> cuCpMsg = BuildRicIndicationMessageCuCp (plmId);
 
-      // Send CU-CP only if offline logging is disabled
-      if (!m_forceE2FileLogging && header != nullptr && cuCpMsg != nullptr)
+      // Send CU-CP only if offline logging is disabled and encoding succeeded
+      if (!m_forceE2FileLogging && header != nullptr && cuCpMsg != nullptr &&
+          header->m_buffer != nullptr && cuCpMsg->m_buffer != nullptr &&
+          header->m_size > 0 && cuCpMsg->m_size > 0)
         {
-
           NS_LOG_DEBUG ("Send LTE CU-CP");
           E2AP_PDU *pdu_cucp_ue = new E2AP_PDU;
           encoding::generate_e2apv1_indication_request_parameterized (
@@ -1161,6 +1168,10 @@ LteEnbNetDevice::BuildAndSendReportMessage (E2Termination::RicSubscriptionReques
               cuCpMsg->m_size); // size of the encoded message
           m_e2term->SendE2Message (pdu_cucp_ue);
           delete pdu_cucp_ue;
+        }
+      else if (!m_forceE2FileLogging && header != nullptr && cuCpMsg != nullptr)
+        {
+          NS_LOG_DEBUG ("Skipping LTE CU-CP send: encoding failed (m_buffer is nullptr)");
         }
     }
 
