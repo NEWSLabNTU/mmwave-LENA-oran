@@ -2,9 +2,13 @@
 /*
  * Linear Handover Scenario - Fast deterministic handover testing
  *
- * Topology: 2 mmWave gNBs, 1 UE
- * Movement: Linear path from gNB1 to gNB2 at 30 m/s
+ * Topology: 1 LTE eNB (anchor) + 2 mmWave gNBs, 1 UE (Dual Connectivity)
+ * Movement: Linear path from gNB1 to gNB2 at 80 m/s
  * Purpose: Phase 2 HTTP integration testing - validates xApp handover detection
+ *
+ * The LTE eNB acts as control plane anchor, while mmWave gNBs provide
+ * high-throughput data connectivity. Secondary cell handovers between
+ * mmWave cells are managed by the LteEnbRrc via X2 interface.
  */
 
 #include "ns3/core-module.h"
@@ -218,6 +222,14 @@ main (int argc, char *argv[])
   // Enable/disable E2 file logging
   Config::SetDefault ("ns3::MmWaveEnbNetDevice::EnableE2FileLogging", BooleanValue (enableE2FileLogging));
 
+  // LTE eNB E2 Configuration (for DC anchor - control plane only)
+  Config::SetDefault ("ns3::LteEnbNetDevice::ControlFileName", StringValue (controlFilename));
+  Config::SetDefault ("ns3::LteEnbNetDevice::E2Periodicity", DoubleValue (indicationPeriodicity));
+  Config::SetDefault ("ns3::LteEnbNetDevice::EnableCuUpReport", BooleanValue (e2cuUp));
+  Config::SetDefault ("ns3::LteEnbNetDevice::EnableCuCpReport", BooleanValue (e2cuCp));
+  Config::SetDefault ("ns3::LteEnbNetDevice::ReducedPmValues", BooleanValue (reducedPmValues));
+  Config::SetDefault ("ns3::LteEnbNetDevice::EnableE2FileLogging", BooleanValue (enableE2FileLogging));
+
   // DEBUG: Verify E2 configuration
   NS_LOG_INFO ("[E2 DEBUG] E2 Configuration Applied:");
   NS_LOG_INFO ("  E2TermIp: " << e2TermIp);
@@ -240,7 +252,8 @@ main (int argc, char *argv[])
   Ptr<MmWavePointToPointEpcHelper> epcHelper = CreateObject<MmWavePointToPointEpcHelper> ();
   mmwaveHelper->SetEpcHelper (epcHelper);
 
-  // Topology: 2 mmWave gNBs, 1 UE
+  // Topology: 1 LTE eNB (anchor) + 2 mmWave gNBs, 1 UE (Dual Connectivity)
+  uint8_t nLteEnbNodes = 1;
   uint8_t nMmWaveEnbNodes = 2;
   uint8_t nUeNodes = 1;
 
@@ -267,23 +280,30 @@ main (int argc, char *argv[])
       ipv4RoutingHelper.GetStaticRouting (remoteHost->GetObject<Ipv4> ());
   remoteHostStaticRouting->AddNetworkRouteTo (Ipv4Address ("7.0.0.0"), Ipv4Mask ("255.0.0.0"), 1);
 
-  // Create nodes
+  // Create nodes (LTE anchor + mmWave gNBs + UEs)
   NodeContainer ueNodes;
   NodeContainer mmWaveEnbNodes;
+  NodeContainer lteEnbNodes;
+  NodeContainer allEnbNodes;
+  lteEnbNodes.Create (nLteEnbNodes);
   mmWaveEnbNodes.Create (nMmWaveEnbNodes);
   ueNodes.Create (nUeNodes);
+  allEnbNodes.Add (lteEnbNodes);
+  allEnbNodes.Add (mmWaveEnbNodes);
   NodeContainerManager::GetInstance().SetMmWaveEnbNodes(mmWaveEnbNodes);
 
-  // Position gNBs along a horizontal line 300m apart (FAST handover)
-  // gNB1 at (500, 1000), gNB2 at (800, 1000)
+  // Position eNBs/gNBs:
+  // LTE eNB at center (650, 1000) - acts as control plane anchor
+  // mmWave gNB1 at (500, 1000), mmWave gNB2 at (800, 1000)
   Ptr<ListPositionAllocator> enbPositionAlloc = CreateObject<ListPositionAllocator> ();
-  enbPositionAlloc->Add (Vector (500, 1000, 10));   // gNB 1
-  enbPositionAlloc->Add (Vector (800, 1000, 10));  // gNB 2
+  enbPositionAlloc->Add (Vector (650, 1000, 25));  // LTE eNB (center, higher tower)
+  enbPositionAlloc->Add (Vector (500, 1000, 10));  // mmWave gNB 1
+  enbPositionAlloc->Add (Vector (800, 1000, 10));  // mmWave gNB 2
 
   MobilityHelper enbmobility;
   enbmobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
   enbmobility.SetPositionAllocator (enbPositionAlloc);
-  enbmobility.Install (mmWaveEnbNodes);
+  enbmobility.Install (allEnbNodes);  // Install on all eNBs (LTE + mmWave)
 
   // UE starts near gNB1 and moves in straight line toward gNB2
   // Start position: (400, 1000) - 100m from gNB1
@@ -303,19 +323,21 @@ main (int argc, char *argv[])
   Ptr<ConstantVelocityMobilityModel> ueModel = ueNodes.Get(0)->GetObject<ConstantVelocityMobilityModel>();
   ueModel->SetVelocity(Vector(80.0, 0.0, 0.0));  // 80 m/s in +X direction
 
-  NS_LOG_UNCOND ("gNB1 position: (500, 1000, 10)");
-  NS_LOG_UNCOND ("gNB2 position: (800, 1000, 10)");
+  NS_LOG_UNCOND ("LTE eNB position: (650, 1000, 25) - control plane anchor");
+  NS_LOG_UNCOND ("mmWave gNB1 position: (500, 1000, 10)");
+  NS_LOG_UNCOND ("mmWave gNB2 position: (800, 1000, 10)");
   NS_LOG_UNCOND ("UE start position: (400, 1000, 1.5)");
   NS_LOG_UNCOND ("UE velocity: 80 m/s toward gNB2");
 
-  // Install mmWave devices
+  // Install LTE, mmWave, and MC UE devices (Dual Connectivity)
+  NetDeviceContainer lteEnbDevs = mmwaveHelper->InstallLteEnbDevice (lteEnbNodes);
   NetDeviceContainer mmWaveEnbDevs = mmwaveHelper->InstallEnbDevice (mmWaveEnbNodes);
-  NetDeviceContainer ueDevs = mmwaveHelper->InstallUeDevice (ueNodes);
+  NetDeviceContainer mcUeDevs = mmwaveHelper->InstallMcUeDevice (ueNodes);
 
   // Install IP stack on UEs
   internet.Install (ueNodes);
   Ipv4InterfaceContainer ueIpIface;
-  ueIpIface = epcHelper->AssignUeIpv4Address (NetDeviceContainer (ueDevs));
+  ueIpIface = epcHelper->AssignUeIpv4Address (NetDeviceContainer (mcUeDevs));
 
   // Set default gateway for UE
   for (uint32_t u = 0; u < ueNodes.GetN (); ++u)
@@ -326,11 +348,11 @@ main (int argc, char *argv[])
       ueStaticRouting->SetDefaultRoute (epcHelper->GetUeDefaultGatewayAddress (), 1);
     }
 
-  // Add X2 interface between gNBs
-  mmwaveHelper->AddX2Interface (mmWaveEnbNodes);
+  // Add X2 interfaces between LTE and mmWave eNBs (required for DC handovers)
+  mmwaveHelper->AddX2Interface (lteEnbNodes, mmWaveEnbNodes);
 
-  // Attach UE to closest gNB (will start on gNB1)
-  mmwaveHelper->AttachToClosestEnb (ueDevs, mmWaveEnbDevs);
+  // Attach MC UE to closest eNBs (LTE anchor + mmWave for data)
+  mmwaveHelper->AttachToClosestEnb (mcUeDevs, mmWaveEnbDevs, lteEnbDevs);
 
   // Install applications - UDP downlink traffic
   uint16_t portUdp = 1234;
